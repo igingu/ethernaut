@@ -1,33 +1,30 @@
-[12 - Privacy](https://ethernaut.openzeppelin.com/level/0xcAac6e4994c2e21C5370528221c226D1076CfDAB)
+[14 - GateKeeper Two]
 
-Solution: 
-* storage is public on the blockchain, if you know how to read it
-* we can use the same method as for Vault challenge, just with a different index
-```
-bool public locked = true; // slot 0
-uint256 public ID = block.timestamp; // slot 1
-uint8 private flattening = 10; // slot 2
-uint8 private denomination = 255; // slot 2
-uint16 private awkwardness = uint16(block.timestamp); // slot 2
-bytes32[3] private data; // slot 3, 4, 5
-```
-* data[2] should be slot 5
-```
-const options = {
-  method: 'POST',
-  headers: {accept: 'application/json', 'content-type': 'application/json'},
-  body: JSON.stringify({
-    id: 1,
-    jsonrpc: '2.0',
-    method: 'eth_getStorageAt',
-    params: ['0x67A2E1E7EfaCD82dEf7D315c4D11EA7a724C57bD', '0x05', 'latest']
-  })
-};
+Solution (implemented using forge as well): 
+FirstGate: 
+* have another contract call enter 
 
-fetch('https://eth-goerli.g.alchemy.com/v2/docs-demo', options)
-  .then(response => response.json())
-  .then(response => console.log(response))
-  .catch(err => console.error(err));
+SecondGate:
+* secondGate uses the ```extcodesize``` yul instruction, which only returns 0 if caller ia not a smart contract
+* from gateOne, caller should be smart contract
+* the only way in which ```extcodesize``` would return 0 if caller was a smart contract is if the call happened in the smart contract's constructor
+
+GateThree:
 ```
-* returns **0x2268d6686c8a2e721ad064093ccc5f237a142c31a5021d7fc820ef8880fcdbc8**
-* bytes16 of this is **0x2268d6686c8a2e721ad064093ccc5f23**, the beginning part
+require(uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^ uint64(_gateKey) == type(uint64).max)
+```
+We have A ^ B = C, and we need to find out B.
+Xor both sides by A, to the left => A ^ A ^ B = A ^ C
+A ^ A = 0; 0 ^ X = X => A ^ A ^ B = 0 ^ B = B = A ^ C
+_gateKey = bytes8(keccak256(abi.encodePacked(msg.sender))) ^ bytes8(type(uint64).max)
+
+Result:
+```
+contract GatekeeperTwoHack {
+    constructor(address gatekeeperTwoAddress) {
+        uint64 gateKey = uint64(bytes8(keccak256(abi.encodePacked(address(this))))) ^ uint64(bytes8(type(uint64).max));
+
+        GatekeeperTwo(gatekeeperTwoAddress).enter(bytes8(gateKey));
+    }
+}
+```
